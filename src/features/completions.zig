@@ -1202,7 +1202,7 @@ fn getEnumLiteralContext(
 
     var dot_context: EnumLiteralContext = .{ .likely = .enum_literal };
 
-    switch (tree.tokenTag(token_index)) {
+    tag: switch (tree.tokenTag(token_index)) {
         .equal => {
             token_index -= 1;
             dot_context.need_ret_type = tree.tokenTag(token_index) == .r_paren;
@@ -1248,6 +1248,10 @@ fn getEnumLiteralContext(
         },
         .l_brace, .comma, .l_paren => {
             dot_context = getSwitchOrStructInitContext(tree, dot_token_index, nodes) orelse return null;
+        },
+        .ampersand => {
+            token_index -= 1;
+            continue :tag tree.tokenTag(token_index);
         },
         else => return null,
     }
@@ -1736,7 +1740,8 @@ fn collectVarAccessContainerNodes(
 
     const symbol_decl = try analyser.lookupSymbolGlobal(handle, handle.tree.source[loc.start..loc.end], loc.end) orelse return;
     const result = try symbol_decl.resolveType(analyser) orelse return;
-    const type_expr = try analyser.resolveDerefType(result) orelse result;
+    var type_expr = try analyser.resolveDerefType(result) orelse result;
+    type_expr = type_expr.resolveDeclLiteralResultType();
     if (!type_expr.isFunc()) {
         _ = try type_expr.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
         return;
@@ -1752,7 +1757,7 @@ fn collectVarAccessContainerNodes(
     }
     const param_index = dot_context.fn_arg_index;
     if (param_index >= info.parameters.len) return;
-    const param_type = info.parameters[param_index].type;
+    const param_type = info.parameters[param_index].type.resolveDeclLiteralResultType();
     _ = try param_type.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
 }
 
@@ -1786,7 +1791,7 @@ fn collectFieldAccessTypes(
     const params = info.parameters;
     const param_index = dot_context.fn_arg_index + @intFromBool(has_self_param);
     if (param_index >= params.len) return;
-    const param_type = params[param_index].type;
+    const param_type = params[param_index].type.resolveDeclLiteralResultType();
     _ = try param_type.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
 }
 
