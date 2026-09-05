@@ -1250,8 +1250,8 @@ test "namespace" {
         \\const instance: namespace = undefined;
         \\const bar = instance.<cursor>
     , &.{
-        .{ .label = "beta", .kind = .Function, .detail = "fn (_: anytype) void" },
-        .{ .label = "gamma", .kind = .Function, .detail = "fn (_: namespace) void" },
+        .{ .label = "beta", .kind = .Method, .detail = "fn (_: anytype) void" },
+        .{ .label = "gamma", .kind = .Method, .detail = "fn (_: namespace) void" },
     });
     try testCompletion(
         \\fn alpha() void {}
@@ -1261,8 +1261,8 @@ test "namespace" {
         \\const foo: @This() = undefined;
         \\const bar = foo.<cursor>;
     , &.{
-        .{ .label = "beta", .kind = .Function, .detail = "fn (_: anytype) void" },
-        .{ .label = "gamma", .kind = .Function, .detail = "fn (_: Untitled-0) void" },
+        .{ .label = "beta", .kind = .Method, .detail = "fn (_: anytype) void" },
+        .{ .label = "gamma", .kind = .Method, .detail = "fn (_: Untitled-0) void" },
     });
 }
 
@@ -1376,6 +1376,22 @@ test "struct" {
     , &.{
         .{ .label = "alpha", .kind = .Field, .detail = "u32" },
         .{ .label = "beta", .kind = .Field, .detail = "[]const u8" },
+    });
+
+    try testCompletion(
+        \\const S = struct {
+        \\    alpha: u32,
+        \\    fn foo(self: S) void {
+        \\        self.<cursor>
+        \\    }
+        \\    fn optPtr(_: ?*S) void {}
+        \\    fn optValue(_: ?S) void {}
+        \\};
+    , &.{
+        .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+        .{ .label = "foo", .kind = .Method, .detail = "fn (self: S) void" },
+        .{ .label = "optPtr", .kind = .Method, .detail = "fn (_: ?*S) void" },
+        .{ .label = "optValue", .kind = .Method, .detail = "fn (_: ?S) void" },
     });
 }
 
@@ -3017,8 +3033,8 @@ test "declarations" {
         \\const foo: S = undefined;
         \\const bar = foo.<cursor>
     , &.{
-        .{ .label = "public", .kind = .Function, .detail = "fn (self: S) S" },
-        .{ .label = "private", .kind = .Function, .detail = "fn (self: S) !void" },
+        .{ .label = "public", .kind = .Method, .detail = "fn (self: S) S" },
+        .{ .label = "private", .kind = .Method, .detail = "fn (self: S) !void" },
     });
 }
 
@@ -3561,7 +3577,7 @@ test "either" {
         \\const bar = foo.<cursor>
     , &.{
         .{ .label = "field", .kind = .Field, .detail = "u32" },
-        .{ .label = "alpha", .kind = .Function, .detail = "fn (_: Alpha) void" },
+        .{ .label = "alpha", .kind = .Method, .detail = "fn (_: Alpha) void" },
         .{ .label = "beta", .kind = .Method, .detail = "fn (_: Beta) void" },
     });
     try testCompletion(
@@ -3578,7 +3594,7 @@ test "either" {
         \\const foo = gamma.<cursor>
     , &.{
         .{ .label = "field", .kind = .Field, .detail = "u32" },
-        .{ .label = "alpha", .kind = .Function, .detail = "fn (_: Alpha) void" },
+        .{ .label = "alpha", .kind = .Method, .detail = "fn (_: Alpha) void" },
         .{ .label = "beta", .kind = .Method, .detail = "fn (_: Beta) void" },
     });
 
@@ -4736,7 +4752,7 @@ test "generic function with @This() as self param" {
     , &.{
         .{
             .label = "bar",
-            .kind = .Function,
+            .kind = .Method,
             .detail = "fn (_: *const Foo, comptime _: type) void",
         },
     });
@@ -4759,12 +4775,12 @@ test "methods of branching type" {
     , &.{
         .{
             .label = "foo",
-            .kind = .Function,
+            .kind = .Method,
             .detail = "fn (_: *either type) bool",
         },
         .{
             .label = "bar",
-            .kind = .Function,
+            .kind = .Method,
             .detail = "fn (_: *either type) bool",
         },
     });
