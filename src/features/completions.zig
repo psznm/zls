@@ -385,7 +385,6 @@ fn functionTypeCompletion(
 
     const has_self_param = if (parent_container_ty) |container_ty| blk: {
         if (container_ty.is_type_val) break :blk false;
-        if (container_ty.isNamespace()) break :blk false;
         break :blk builder.analyser.firstParamIs(func_ty, try container_ty.typeOf(builder.analyser));
     } else false;
 
@@ -1202,7 +1201,7 @@ fn getEnumLiteralContext(
 
     var dot_context: EnumLiteralContext = .{ .likely = .enum_literal };
 
-    switch (tree.tokenTag(token_index)) {
+    tag: switch (tree.tokenTag(token_index)) {
         .equal => {
             token_index -= 1;
             dot_context.need_ret_type = tree.tokenTag(token_index) == .r_paren;
@@ -1248,6 +1247,10 @@ fn getEnumLiteralContext(
         },
         .l_brace, .comma, .l_paren => {
             dot_context = getSwitchOrStructInitContext(tree, dot_token_index, nodes) orelse return null;
+        },
+        .ampersand => {
+            token_index -= 1;
+            continue :tag tree.tokenTag(token_index);
         },
         else => return null,
     }
@@ -1736,7 +1739,8 @@ fn collectVarAccessContainerNodes(
 
     const symbol_decl = try analyser.lookupSymbolGlobal(handle, handle.tree.source[loc.start..loc.end], loc.end) orelse return;
     const result = try symbol_decl.resolveType(analyser) orelse return;
-    const type_expr = try analyser.resolveDerefType(result) orelse result;
+    var type_expr = try analyser.resolveDerefType(result) orelse result;
+    type_expr = type_expr.resolveDeclLiteralResultType();
     if (!type_expr.isFunc()) {
         _ = try type_expr.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
         return;
@@ -1752,7 +1756,7 @@ fn collectVarAccessContainerNodes(
     }
     const param_index = dot_context.fn_arg_index;
     if (param_index >= info.parameters.len) return;
-    const param_type = info.parameters[param_index].type;
+    const param_type = info.parameters[param_index].type.resolveDeclLiteralResultType();
     _ = try param_type.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
 }
 
@@ -1761,7 +1765,7 @@ fn collectFieldAccessTypes(
     dot_context: EnumLiteralContext,
     ty: Analyser.Type,
     types_with_handles: *Analyser.Type.ArraySet,
-) error{OutOfMemory}!void {
+) error{ OutOfMemory, Canceled }!void {
     const analyser = builder.analyser;
 
     var node_type = ty;
@@ -1782,11 +1786,29 @@ fn collectFieldAccessTypes(
         _ = try node_type.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
         return;
     }
-    const has_self_param = try analyser.hasSelfParam(node_type);
+
+    std.debug.assert(node_type.isFunc());
+    const param_offset: usize = offs: {
+        const tree = &builder.orig_handle.tree;
+        const idx = switch (dot_context.type_info) {
+            .identifier_token_index => |idx| idx,
+            .expr_node_index => break :offs 0,
+        };
+
+        if (tree.tokenTag(idx - 1) != .period) break :offs 0;
+        const nodes = try ast.nodesOverlappingIndexIncludingParseErrors(analyser.arena, tree, tree.tokenStart(idx - 2));
+        defer analyser.arena.free(nodes);
+
+        const node = nodes[0];
+        const typ = try analyser.resolveTypeOfNode(.of(node, builder.orig_handle)) orelse break :offs 0;
+        if (typ.is_type_val) break :offs 0;
+        break :offs @intFromBool(analyser.firstParamIs(node_type, try typ.typeOf(analyser)));
+    };
+
     const params = info.parameters;
-    const param_index = dot_context.fn_arg_index + @intFromBool(has_self_param);
+    const param_index = dot_context.fn_arg_index + param_offset;
     if (param_index >= params.len) return;
-    const param_type = params[param_index].type;
+    const param_type = params[param_index].type.resolveDeclLiteralResultType();
     _ = try param_type.getAllTypesWithHandlesArraySet(analyser, types_with_handles);
 }
 
