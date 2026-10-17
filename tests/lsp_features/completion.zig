@@ -325,6 +325,30 @@ test "function alias" {
             .detail = "u32",
         },
     });
+    try testCompletion(
+        \\const S = struct {
+        \\    fn foo(_: S, _: enum{ alpha, beta }) void {}
+        \\    const bar = foo;
+        \\};
+        \\const s: S = undefined;
+        \\const baz = s.bar(.<cursor>);
+    , &.{
+        .{ .label = "alpha", .kind = .EnumMember },
+        .{ .label = "beta", .kind = .EnumMember },
+    });
+    try testCompletion(
+        \\const other_cont = struct {
+        \\    fn testFn(_: Test, _: enum { alpha, beta }) void {}
+        \\};
+        \\const Test = struct {
+        \\    pub const testFn = other_cont.testFn;
+        \\};
+        \\const idk: Test = undefined;
+        \\idk.testFn(.<cursor>);
+    , &.{
+        .{ .label = "alpha", .kind = .EnumMember },
+        .{ .label = "beta", .kind = .EnumMember },
+    });
 }
 
 test "generic function" {
@@ -1250,8 +1274,8 @@ test "namespace" {
         \\const instance: namespace = undefined;
         \\const bar = instance.<cursor>
     , &.{
-        .{ .label = "beta", .kind = .Function, .detail = "fn (_: anytype) void" },
-        .{ .label = "gamma", .kind = .Function, .detail = "fn (_: namespace) void" },
+        .{ .label = "beta", .kind = .Method, .detail = "fn (_: anytype) void" },
+        .{ .label = "gamma", .kind = .Method, .detail = "fn (_: namespace) void" },
     });
     try testCompletion(
         \\fn alpha() void {}
@@ -1261,8 +1285,8 @@ test "namespace" {
         \\const foo: @This() = undefined;
         \\const bar = foo.<cursor>;
     , &.{
-        .{ .label = "beta", .kind = .Function, .detail = "fn (_: anytype) void" },
-        .{ .label = "gamma", .kind = .Function, .detail = "fn (_: Untitled-0) void" },
+        .{ .label = "beta", .kind = .Method, .detail = "fn (_: anytype) void" },
+        .{ .label = "gamma", .kind = .Method, .detail = "fn (_: Untitled-0) void" },
     });
 }
 
@@ -1745,6 +1769,67 @@ test "decl literal function call" {
         .{ .label = "field", .kind = .Field, .detail = "u32" },
         .{ .label = "default", .kind = .Constant },
         .{ .label = "init", .kind = .Function, .detail = "fn () S" },
+    });
+}
+
+test "function call struct parameter completion" {
+    try testCompletion(
+        \\fn foo(s: struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(.<cursor>);
+        \\}
+    , &.{
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\fn foo(s: struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(.{.<cursor>);
+        \\}
+    , &.{
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\fn foo(s: ?struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(.<cursor>);
+        \\}
+    , &.{
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\fn foo(s: ?struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(.{.<cursor>);
+        \\}
+    , &.{
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\fn foo(s: *const struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(.<cursor>);
+        \\}
+    , &.{
+        // While the completion won't actually result in code that will compile due to creating not a pointer
+        // This will still assist user in actually writing code - the compiler will do the rest.
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\fn foo(s: *const struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(.{.<cursor>);
+        \\}
+    , &.{
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\fn foo(s: *const struct {field: u32}) void {}
+        \\fn bar() void {
+        \\    foo(&.<cursor>);
+        \\}
+    , &.{
+        .{ .label = "field", .kind = .Field, .detail = "u32" },
     });
 }
 
@@ -2510,6 +2595,67 @@ test "structinit" {
     });
 }
 
+test "structinit - anonymous" {
+    try testCompletion(
+        \\fn foo() E {
+        \\    const foo2: struct { alpha: u32 } = .a<cursor>
+        \\}
+    , &.{
+        .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\var foo: struct { alpha: u32 } = undefined;
+        \\foo = .<cursor>
+    , &.{
+        .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    });
+    // try testCompletion(
+    //     \\fn foo() E {
+    //     \\    const foo2: struct { alpha: u32 } = .{.<cursor>
+    //     \\}
+    // , &.{
+    //     .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    // });
+    // try testCompletion(
+    //     \\fn foo() E {
+    //     \\    const foo2: struct { alpha: u32 } = .<cursor>
+    //     \\}
+    // , &.{
+    //     .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    // });
+    // try testCompletion(
+    //     \\const foo2: struct { alpha: u32 } = .a<cursor>
+    // , &.{
+    //     .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    // });
+}
+
+test "structinit - address of" {
+    try testCompletion(
+        \\const T = struct { a: u32 };
+        \\var t: ?*const T = &.<cursor>
+    , &.{
+        .{ .label = "a", .kind = .Field, .detail = "u32" },
+    });
+    try testCompletion(
+        \\const T = struct { a: u32 };
+        \\var t: ?*const T = undefined;
+        \\t = &.<cursor>
+    , &.{
+        .{ .label = "a", .kind = .Field, .detail = "u32" },
+    });
+    // try testCompletion(
+    //     \\var t: *const struct { a: u32 } = &.<cursor>
+    // , &.{
+    //     .{ .label = "a", .kind = .Field, .detail = "u32" },
+    // });
+    // try testCompletion(
+    //     \\var t: ?*const struct { a: u32 } = &.<cursor>
+    // , &.{
+    //     .{ .label = "a", .kind = .Field, .detail = "u32" },
+    // });
+}
+
 test "structinit - fields with and without default value" {
     try testCompletionWithOptions(
         \\const S = struct {
@@ -2911,8 +3057,8 @@ test "declarations" {
         \\const foo: S = undefined;
         \\const bar = foo.<cursor>
     , &.{
-        .{ .label = "public", .kind = .Function, .detail = "fn (self: S) S" },
-        .{ .label = "private", .kind = .Function, .detail = "fn (self: S) !void" },
+        .{ .label = "public", .kind = .Method, .detail = "fn (self: S) S" },
+        .{ .label = "private", .kind = .Method, .detail = "fn (self: S) !void" },
     });
 }
 
@@ -2996,6 +3142,46 @@ test "function taking a generic struct arg" {
     , &.{
         .{ .label = "field", .kind = .Field, .detail = "u8" },
     });
+}
+
+test "function taking an anonymous struct arg" {
+    try testCompletion(
+        \\const Foo = struct {
+        \\   alpha: u32,
+        \\   fn init(opts: struct {alpha: u32}) Foo {
+        \\       return .{ .alpha = opts.alpha };
+        \\   }
+        \\};
+        \\const bar: Foo = .init(.{ .a<cursor> });
+    , &.{
+        .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    });
+
+    try testCompletion(
+        \\const Foo = struct {
+        \\   alpha: u32,
+        \\   fn init(opts: struct {alpha: u32}) Foo {
+        \\       return .{ .alpha = opts.alpha };
+        \\   }
+        \\};
+        \\const bar: Foo = .init(.a<cursor>);
+    , &.{
+        .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    });
+
+    // // Not working due to parser limitations because the init function call is invalid syntax, ".init" is evaluated
+    // // as primitive value instead of a function call.
+    // try testCompletion(
+    //     \\const Foo = struct {
+    //     \\   alpha: u32,
+    //     \\   fn init(opts: struct {alpha: u32}) Foo {
+    //     \\       return .{ .alpha = opts.alpha };
+    //     \\   }
+    //     \\};
+    //     \\const bar: Foo = .init(.<cursor>);
+    // , &.{
+    //     .{ .label = "alpha", .kind = .Field, .detail = "u32" },
+    // });
 }
 
 test "anytype resolution based on callsite-references" {
@@ -3455,7 +3641,7 @@ test "either" {
         \\const bar = foo.<cursor>
     , &.{
         .{ .label = "field", .kind = .Field, .detail = "u32" },
-        .{ .label = "alpha", .kind = .Function, .detail = "fn (_: Alpha) void" },
+        .{ .label = "alpha", .kind = .Method, .detail = "fn (_: Alpha) void" },
         .{ .label = "beta", .kind = .Method, .detail = "fn (_: Beta) void" },
     });
     try testCompletion(
@@ -3472,7 +3658,7 @@ test "either" {
         \\const foo = gamma.<cursor>
     , &.{
         .{ .label = "field", .kind = .Field, .detail = "u32" },
-        .{ .label = "alpha", .kind = .Function, .detail = "fn (_: Alpha) void" },
+        .{ .label = "alpha", .kind = .Method, .detail = "fn (_: Alpha) void" },
         .{ .label = "beta", .kind = .Method, .detail = "fn (_: Beta) void" },
     });
 
@@ -4630,7 +4816,7 @@ test "generic function with @This() as self param" {
     , &.{
         .{
             .label = "bar",
-            .kind = .Function,
+            .kind = .Method,
             .detail = "fn (_: *const Foo, comptime _: type) void",
         },
     });
@@ -4653,12 +4839,12 @@ test "methods of branching type" {
     , &.{
         .{
             .label = "foo",
-            .kind = .Function,
+            .kind = .Method,
             .detail = "fn (_: *either type) bool",
         },
         .{
             .label = "bar",
-            .kind = .Function,
+            .kind = .Method,
             .detail = "fn (_: *either type) bool",
         },
     });
